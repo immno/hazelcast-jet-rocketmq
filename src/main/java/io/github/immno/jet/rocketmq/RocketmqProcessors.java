@@ -1,19 +1,17 @@
 package io.github.immno.jet.rocketmq;
 
-import java.util.Arrays;
-import java.util.Properties;
-
-import javax.annotation.Nonnull;
-
-import org.apache.rocketmq.common.message.Message;
-import org.apache.rocketmq.common.message.MessageExt;
-
 import com.hazelcast.function.FunctionEx;
 import com.hazelcast.internal.util.Preconditions;
 import com.hazelcast.jet.core.EventTimePolicy;
 import com.hazelcast.jet.core.ProcessorMetaSupplier;
-
 import io.github.immno.jet.rocketmq.impl.StreamRocketmqP;
+import io.github.immno.jet.rocketmq.impl.WriteRocketmqP;
+import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.common.message.MessageExt;
+
+import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.Properties;
 
 /**
  * Refer to KafkaProcessors
@@ -52,8 +50,6 @@ public final class RocketmqProcessors {
             @Nonnull Properties properties,
             @Nonnull FunctionEx<? super T, ? extends Message> toRecordFn,
             boolean exactlyOnce) {
-        // return ProcessorMetaSupplier.of(1, WriteRocketmqP.supplier(properties,
-        // toRecordFn, exactlyOnce));
-        return null;
+        return ProcessorMetaSupplier.of(1, WriteRocketmqP.supplier(properties, toRecordFn, exactlyOnce));
     }
 }

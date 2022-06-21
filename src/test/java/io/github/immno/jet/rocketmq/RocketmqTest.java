@@ -1,23 +1,20 @@
 package io.github.immno.jet.rocketmq;
 
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.JetService;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import org.apache.rocketmq.client.AccessChannel;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import org.apache.rocketmq.client.AccessChannel;
-import org.apache.rocketmq.common.message.MessageExt;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.function.FunctionEx;
-import com.hazelcast.jet.JetService;
-import com.hazelcast.jet.pipeline.Pipeline;
-import com.hazelcast.jet.pipeline.Sinks;
 
 public class RocketmqTest {
     private static HazelcastInstance hz;
@@ -41,22 +38,11 @@ public class RocketmqTest {
         properties.setProperty(RocketmqConfig.PRODUCER_GROUP, "Mno_jet_test");
         properties.setProperty(RocketmqConfig.ACCESS_CHANNEL, AccessChannel.CLOUD.name());
         p.readFrom(
-                RocketmqSources.rocketmq(properties, t -> new String(t.getBody(), StandardCharsets.UTF_8), "mno_test"))
+                        RocketmqSources.rocketmq(properties, t -> new String(t.getBody(), StandardCharsets.UTF_8), "mno_test"))
                 .withIngestionTimestamps()
                 .writeTo(Sinks.logger());
         JetService jet = hz.getJet();
         jet.newJob(p).getFuture().get(100, TimeUnit.SECONDS);
-    }
-
-    private FunctionEx<MessageExt, String> extracted() {
-        return new FunctionEx<MessageExt, String>() {
-
-            @Override
-            public String applyEx(MessageExt t) throws Exception {
-                return new String(t.getBody(), StandardCharsets.UTF_8);
-            }
-
-        };
     }
 
 }

@@ -1,51 +1,40 @@
 package io.github.immno.jet.rocketmq.impl;
 
+import com.hazelcast.function.FunctionEx;
+import com.hazelcast.function.SupplierEx;
+import com.hazelcast.jet.Traverser;
+import com.hazelcast.jet.Traversers;
+import com.hazelcast.jet.core.*;
+import com.hazelcast.jet.impl.util.LoggingUtil;
+import io.github.immno.jet.rocketmq.RocketmqConfig;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
+import org.apache.rocketmq.client.exception.MQClientException;
+import org.apache.rocketmq.common.message.MessageExt;
+import org.apache.rocketmq.common.message.MessageQueue;
+
+import javax.annotation.Nonnull;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static com.hazelcast.jet.Traversers.traverseIterable;
 import static com.hazelcast.jet.Traversers.traverseStream;
 import static com.hazelcast.jet.Util.entry;
 import static com.hazelcast.jet.core.BroadcastKey.broadcastKey;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.annotation.Nonnull;
-
-import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
-import org.apache.rocketmq.client.exception.MQClientException;
-import org.apache.rocketmq.common.message.MessageExt;
-import org.apache.rocketmq.common.message.MessageQueue;
-
-import com.hazelcast.function.FunctionEx;
-import com.hazelcast.function.SupplierEx;
-import com.hazelcast.jet.Traverser;
-import com.hazelcast.jet.Traversers;
-import com.hazelcast.jet.core.AbstractProcessor;
-import com.hazelcast.jet.core.BroadcastKey;
-import com.hazelcast.jet.core.EventTimeMapper;
-import com.hazelcast.jet.core.EventTimePolicy;
-import com.hazelcast.jet.core.Processor;
-import com.hazelcast.jet.impl.util.LoggingUtil;
-
-import io.github.immno.jet.rocketmq.RocketmqConfig;
-
 public class StreamRocketmqP<T> extends AbstractProcessor {
 
-    /** RocketMQ itself supports multi-threaded consumption, so it is set to 1. */
+    /**
+     * RocketMQ itself supports multi-threaded consumption, so it is set to 1.
+     */
     public static final int PREFERRED_LOCAL_PARALLELISM = 2;
     private static final long METADATA_CHECK_INTERVAL_NANOS = SECONDS.toNanos(5);
     private static final String MESSAGE_QUEUE_SNAPSHOT_KEY = "messageQueues";
 
-    /** MessageQueue processed by the current processor */
+    /**
+     * MessageQueue processed by the current processor
+     */
     Map<MessageQueue, Integer> currentAssignment = new HashMap<>();
 
     private final Properties properties;
@@ -109,7 +98,6 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         try {
             this.consumer.start();
         } catch (MQClientException e) {
-            e.printStackTrace();
             getLogger().warning("Unable to start consumer", e);
         }
     }
@@ -135,20 +123,21 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
     }
 
     private void handleNewMessageQueue(int topicIndex, Collection<MessageQueue> messageQueue,
-            boolean isSnapshotRecovery) {
+                                       boolean isSnapshotRecovery) {
+        Collection<MessageQueue> messageQueueList = new ArrayList<>(messageQueue);
         String topicName = this.topics.get(topicIndex);
         Map<MessageQueue, Long> oldTopicOffsets = topicOffsets(topicName);
-        if (oldTopicOffsets.size() >= messageQueue.size()) {
+        if (oldTopicOffsets.size() >= messageQueueList.size()) {
             return;
         }
         // extend the offsets array for this topic
-        messageQueue.removeAll(oldTopicOffsets.keySet());
-        for (MessageQueue queue : messageQueue) {
+        messageQueueList.removeAll(oldTopicOffsets.keySet());
+        for (MessageQueue queue : messageQueueList) {
             this.offsets.put(queue, -1L);
         }
 
         Collection<MessageQueue> newAssignments = new ArrayList<>();
-        for (MessageQueue newAssignment : messageQueue) {
+        for (MessageQueue newAssignment : messageQueueList) {
             if (handledByThisProcessor(topicIndex, newAssignment.getQueueId())) {
                 currentAssignment.put(newAssignment, currentAssignment.size());
                 newAssignments.add(newAssignment);
@@ -193,15 +182,15 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         traverser = isEmpty(records)
                 ? eventTimeMapper.flatMapIdle()
                 : traverseIterable(records).flatMap(record -> {
-                    MessageQueue mq = new MessageQueue(record.getTopic(), record.getBrokerName(), record.getQueueId());
-                    this.offsets.put(mq, record.getQueueOffset());
-                    T projectedRecord = projectionFn.apply(record);
-                    if (projectedRecord == null) {
-                        return Traversers.empty();
-                    }
-                    return eventTimeMapper.flatMapEvent(projectedRecord, currentAssignment.get(mq),
-                            record.getBornTimestamp());
-                });
+            MessageQueue mq = new MessageQueue(record.getTopic(), record.getBrokerName(), record.getQueueId());
+            this.offsets.put(mq, record.getQueueOffset());
+            T projectedRecord = projectionFn.apply(record);
+            if (projectedRecord == null) {
+                return Traversers.empty();
+            }
+            return eventTimeMapper.flatMapEvent(projectedRecord, currentAssignment.get(mq),
+                    record.getBornTimestamp());
+        });
 
         emitFromTraverser(traverser);
         return false;
@@ -227,7 +216,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
                         MessageQueue key = entry.getKey();
                         long offset = entry.getValue();
                         long watermark = eventTimeMapper.getWatermark(currentAssignment.get(key));
-                        return entry(broadcastKey(key), new long[] { offset, watermark });
+                        return entry(broadcastKey(key), new long[]{offset, watermark});
                     });
             snapshotTraverser = traverseStream(snapshotStream)
                     .onFirstNull(() -> {
@@ -268,14 +257,14 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
             }
             int topicIndex = this.topics.indexOf(topic);
             assert topicIndex >= 0;
-            handleNewMessageQueue(topicIndex, Arrays.asList(mq), true);
+            handleNewMessageQueue(topicIndex, Collections.singletonList(mq), true);
             if (!handledByThisProcessor(topicIndex, mq.getQueueId())) {
                 return;
             }
             long mqOffset = this.offsets.get(mq);
             assert mqOffset < 0
                     : "duplicate offset for topicPartition '" + mq
-                            + "' restored, offset1=" + mqOffset + ", offset2=" + offset;
+                    + "' restored, offset1=" + mqOffset + ", offset2=" + offset;
             this.offsets.put(mq, offset);
             try {
                 consumer.seek(mq, offset + 1);
@@ -291,7 +280,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
     private void restorebyKey(Map<MessageQueue, Long> messageQueue) {
         Map<String, Set<MessageQueue>> topicQueueMap = messageQueue.entrySet().stream()
                 .collect(Collectors.groupingBy(keyMapper -> keyMapper.getKey().getTopic(),
-                        Collectors.mapping(mapper -> mapper.getKey(), Collectors.toSet())));
+                        Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));
 
         for (Map.Entry<String, Set<MessageQueue>> topicQueueEntry : topicQueueMap.entrySet()) {
             String topicName = topicQueueEntry.getKey();
@@ -322,7 +311,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
 
     private Map<MessageQueue, Long> offsets() {
         return this.currentAssignment.keySet().stream()
-                .collect(Collectors.toMap(tp -> tp, tp -> this.offsets.get(tp)));
+                .collect(Collectors.toMap(tp -> tp, this.offsets::get));
     }
 
     private Map<MessageQueue, Long> watermarks() {

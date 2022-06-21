@@ -144,11 +144,11 @@ public final class RocketmqSinks {
            if (topic != null) {
                FunctionEx<? super E, String> extractKeyFn1 = extractKeyFn != null ? extractKeyFn : t -> null;
                FunctionEx<? super E, byte[]> extractValueFn1 = extractValueFn != null ? extractValueFn : t -> new byte[]{};
-               return Sinks.fromProcessor("kafkaSink(" + topic + ")",
+               return Sinks.fromProcessor("rocketmqSink(" + topic + ")",
                        RocketmqProcessors.writeRocketmqP(properties, topic, extractKeyFn1, extractValueFn1, exactlyOnce));
            } else {
                ProcessorMetaSupplier metaSupplier = RocketmqProcessors.writeRocketmqP(properties, toRecordFn, exactlyOnce);
-               return Sinks.fromProcessor("kafkaSink", metaSupplier);
+               return Sinks.fromProcessor("rocketmqSink", metaSupplier);
            }
        }
    }
