@@ -1,17 +1,16 @@
 package io.github.immno.jet.rocketmq;
 
-import static com.hazelcast.internal.util.Preconditions.checkPositive;
-import static com.hazelcast.jet.pipeline.Sources.streamFromProcessorWithWatermarks;
-
-import java.util.Properties;
-
-import javax.annotation.Nonnull;
-
-import org.apache.rocketmq.common.message.Message;
+import com.hazelcast.function.FunctionEx;
+import com.hazelcast.jet.Util;
+import com.hazelcast.jet.pipeline.StreamSource;
 import org.apache.rocketmq.common.message.MessageExt;
 
-import com.hazelcast.function.FunctionEx;
-import com.hazelcast.jet.pipeline.StreamSource;
+import javax.annotation.Nonnull;
+import java.util.Map;
+import java.util.Properties;
+
+import static com.hazelcast.internal.util.Preconditions.checkPositive;
+import static com.hazelcast.jet.pipeline.Sources.streamFromProcessorWithWatermarks;
 
 /**
  * Refer to KafkaSources
@@ -20,15 +19,11 @@ public final class RocketmqSources {
     private RocketmqSources() {
     }
 
-    /**
-     * Convenience for {@link #rocketmq(Properties, FunctionEx, String...)}
-     * wrapping the output byte[].
-     */
     @Nonnull
-    public static StreamSource<byte[]> rocketmq(
+    public static StreamSource<Map.Entry<String, String>> rocketmq(
             @Nonnull Properties properties,
             @Nonnull String... topics) {
-        return RocketmqSources.rocketmq(properties, Message::getBody, topics);
+        return RocketmqSources.rocketmq(properties, r -> Util.entry(r.getKeys(), new String(r.getBody())), topics);
     }
 
     @Nonnull

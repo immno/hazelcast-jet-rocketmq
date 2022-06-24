@@ -1,20 +1,23 @@
 package io.github.immno.jet.rocketmq;
 
-import java.lang.management.ManagementFactory;
-import java.util.Properties;
-import java.util.UUID;
-
+import com.hazelcast.internal.util.Preconditions;
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.AccessChannel;
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 
-import com.hazelcast.internal.util.Preconditions;
+import java.lang.management.ManagementFactory;
+import java.util.Objects;
+import java.util.Properties;
+import java.util.UUID;
 
-/** RocketMQConfig for Consumer/Producer. */
+/**
+ * RocketMQConfig for Consumer/Producer.
+ */
 public class RocketmqConfig {
     // Server Config
     public static final String NAME_SERVER_ADDR = "nameserver.address"; // Required
@@ -127,6 +130,23 @@ public class RocketmqConfig {
                         props,
                         CONSUMER_OFFSET_PERSIST_INTERVAL,
                         DEFAULT_CONSUMER_OFFSET_PERSIST_INTERVAL));
+        setConsumeFromWhere(props, consumer);
+    }
+
+    private static void setConsumeFromWhere(Properties props, DefaultLitePullConsumer consumer) {
+        String initialOffset = props.getProperty(CONSUMER_OFFSET_RESET_TO, CONSUMER_OFFSET_LATEST);
+        if (Objects.equals(initialOffset, CONSUMER_OFFSET_EARLIEST)) {
+            consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
+        } else if (Objects.equals(initialOffset, CONSUMER_OFFSET_LATEST)) {
+            consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
+        } else if (Objects.equals(initialOffset, CONSUMER_OFFSET_TIMESTAMP)) {
+            String timestamp = props.getProperty(CONSUMER_OFFSET_FROM_TIMESTAMP);
+            Preconditions.checkHasText(timestamp, CONSUMER_OFFSET_FROM_TIMESTAMP + " is empty");
+            consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
+            consumer.setConsumeTimestamp(timestamp);
+        } else {
+            throw new RuntimeException("Invalid ConsumeFromWhere Value", null);
+        }
     }
 
     /**

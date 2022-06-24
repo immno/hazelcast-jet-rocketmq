@@ -94,7 +94,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         this.consumer.setAutoCommit(true);
         this.consumer.setInstanceName("Jet-" + processorIndex);
         // TODO How to determine the number of threads to consume
-        this.consumer.setPullThreadNums(2);
+        this.consumer.setPullThreadNums(1);
         try {
             this.consumer.start();
         } catch (MQClientException e) {
@@ -127,10 +127,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         Collection<MessageQueue> messageQueueList = new ArrayList<>(messageQueue);
         String topicName = this.topics.get(topicIndex);
         Map<MessageQueue, Long> oldTopicOffsets = topicOffsets(topicName);
-        if (oldTopicOffsets.size() >= messageQueueList.size()) {
-            return;
-        }
-        // extend the offsets array for this topic
+
         messageQueueList.removeAll(oldTopicOffsets.keySet());
         for (MessageQueue queue : messageQueueList) {
             this.offsets.put(queue, -1L);
@@ -242,7 +239,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         if (MESSAGE_QUEUE_SNAPSHOT_KEY.equals(key)) {
             @SuppressWarnings("unchecked")
             Map<MessageQueue, Long> messageQueue = (Map<MessageQueue, Long>) value;
-            restorebyKey(messageQueue);
+            restoreByKey(messageQueue);
         } else {
             MessageQueue mq = (MessageQueue) key;
             long[] value1 = (long[]) value;
@@ -250,7 +247,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
             long watermark = value1[1];
 
             String topic = mq.getTopic();
-            if (topicOffsets(topic).isEmpty()) {
+            if (!topics.contains(topic)) {
                 getLogger().warning("Offset for topic '" + topic
                         + "' is restored from the snapshot, but the topic is not supposed to be read, ignoring");
                 return;
@@ -261,23 +258,25 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
             if (!handledByThisProcessor(topicIndex, mq.getQueueId())) {
                 return;
             }
-            long mqOffset = this.offsets.get(mq);
-            assert mqOffset < 0
-                    : "duplicate offset for topicPartition '" + mq
+            Long mqOffset = this.offsets.get(mq);
+            assert mqOffset == null || mqOffset < 0 : "duplicate offset for topicPartition '" + mq
                     + "' restored, offset1=" + mqOffset + ", offset2=" + offset;
             this.offsets.put(mq, offset);
             try {
-                consumer.seek(mq, offset + 1);
+                this.consumer.seek(mq, offset + 1);
             } catch (MQClientException e) {
                 getLogger().warning("Unable to seekTo " + (offset + 1) + ", ignoring: " + mq, e);
             }
             Integer partitionIndex = currentAssignment.get(mq);
+            if (partitionIndex == null) {
+                System.out.println(111);
+            }
             assert partitionIndex != null;
             eventTimeMapper.restoreWatermark(partitionIndex, watermark);
         }
     }
 
-    private void restorebyKey(Map<MessageQueue, Long> messageQueue) {
+    private void restoreByKey(Map<MessageQueue, Long> messageQueue) {
         Map<String, Set<MessageQueue>> topicQueueMap = messageQueue.entrySet().stream()
                 .collect(Collectors.groupingBy(keyMapper -> keyMapper.getKey().getTopic(),
                         Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));

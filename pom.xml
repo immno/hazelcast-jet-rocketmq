@@ -10,6 +10,7 @@
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
 
+    <assertj.version>3.15.0</assertj.version>
     <hazelcast.version>5.1.1</hazelcast.version>
     <rocketmq.version>4.7.1</rocketmq.version>
     <jms.version>2.0.1</jms.version>
@@ -20,6 +21,7 @@
     <lombok.version>1.18.12</lombok.version>
     <junit.version>4.12</junit.version>
     <testcontainers.version>1.17.2</testcontainers.version>
+    <log4j2.version>2.17.1</log4j2.version>
   </properties>
 
   <dependencies>
@@ -53,6 +55,31 @@
       <groupId>org.testcontainers</groupId>
       <artifactId>testcontainers</artifactId>
       <version>${testcontainers.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.rocketmq</groupId>
+      <artifactId>rocketmq-test</artifactId>
+      <version>${rocketmq.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.hazelcast</groupId>
+      <artifactId>hazelcast</artifactId>
+      <version>${hazelcast.version}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j-impl</artifactId>
+      <version>${log4j2.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
