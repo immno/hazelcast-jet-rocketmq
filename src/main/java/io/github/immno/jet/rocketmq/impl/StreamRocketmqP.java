@@ -25,9 +25,6 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class StreamRocketmqP<T> extends AbstractProcessor {
 
-    /**
-     * RocketMQ itself supports multi-threaded consumption, so it is set to 1.
-     */
     public static final int PREFERRED_LOCAL_PARALLELISM = 2;
     private static final long METADATA_CHECK_INTERVAL_NANOS = SECONDS.toNanos(5);
     private static final String MESSAGE_QUEUE_SNAPSHOT_KEY = "messageQueues";
@@ -143,7 +140,7 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         if (newAssignments.isEmpty()) {
             return;
         }
-        getLogger().info("New messagequeue(s) assigned: " + newAssignments);
+        getLogger().info("New messagequeue(s) assigned(isRestroe:" + isSnapshotRecovery + "): " + newAssignments);
         eventTimeMapper.addPartitions(newAssignments.size());
         consumer.assign(currentAssignment.keySet());
         if (!oldTopicOffsets.isEmpty() && !isSnapshotRecovery) {
@@ -245,6 +242,9 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
             long[] value1 = (long[]) value;
             long offset = value1[0];
             long watermark = value1[1];
+            LoggingUtil.logFinest(getLogger(),
+                    "restoreFromSnapshot.Key: %s, Offset: %s, watermark: %s",
+                    mq, offset, watermark);
 
             String topic = mq.getTopic();
             if (!topics.contains(topic)) {
@@ -263,14 +263,12 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
                     + "' restored, offset1=" + mqOffset + ", offset2=" + offset;
             this.offsets.put(mq, offset);
             try {
+                LoggingUtil.logFinest(getLogger(), "SeekTo. Key: %s, Offset: %s", mq, offset + 1);
                 this.consumer.seek(mq, offset + 1);
             } catch (MQClientException e) {
                 getLogger().warning("Unable to seekTo " + (offset + 1) + ", ignoring: " + mq, e);
             }
             Integer partitionIndex = currentAssignment.get(mq);
-            if (partitionIndex == null) {
-                System.out.println(111);
-            }
             assert partitionIndex != null;
             eventTimeMapper.restoreWatermark(partitionIndex, watermark);
         }

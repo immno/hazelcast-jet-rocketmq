@@ -172,7 +172,7 @@ public class StreamRocketmqPTest extends SimpleTestInClusterSupport {
                     assertTrue("missing entry: " + entry1, list.contains(entry1));
                     assertTrue("missing entry: " + entry2, list.contains(entry2));
                 }
-            }, 20);
+            }, 60);
         }
 
         assertFalse(job.getFuture().isDone());
