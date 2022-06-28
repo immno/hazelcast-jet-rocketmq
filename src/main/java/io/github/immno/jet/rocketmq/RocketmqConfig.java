@@ -7,6 +7,7 @@ import org.apache.rocketmq.client.AccessChannel;
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.client.producer.TransactionMQProducer;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 
@@ -104,11 +105,7 @@ public class RocketmqConfig {
      */
     public static void buildProducerConfigs(Properties props, DefaultMQProducer producer) {
         buildCommonConfigs(props, producer);
-        String group = props.getProperty(PRODUCER_GROUP);
-        if (isEmpty(group)) {
-            group = UUID.randomUUID().toString();
-        }
-        producer.setProducerGroup(props.getProperty(PRODUCER_GROUP, group));
+
         producer.setRetryTimesWhenSendFailed(
                 getInteger(props, PRODUCER_RETRY_TIMES, DEFAULT_PRODUCER_RETRY_TIMES));
         producer.setRetryTimesWhenSendAsyncFailed(
