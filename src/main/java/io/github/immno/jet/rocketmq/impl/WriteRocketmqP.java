@@ -2,28 +2,39 @@ package io.github.immno.jet.rocketmq.impl;
 
 import com.hazelcast.function.SupplierEx;
 import com.hazelcast.jet.core.AbstractProcessor;
-import com.hazelcast.jet.core.Inbox;
 import com.hazelcast.jet.core.Processor;
+import com.hazelcast.jet.core.Watermark;
+import com.hazelcast.logging.ILogger;
 import io.github.immno.jet.rocketmq.RocketmqConfig;
-import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.client.producer.SendCallback;
+import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
 import javax.annotation.Nonnull;
-import java.io.Serializable;
-import java.util.*;
+import java.util.Properties;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-
+/**
+ * RocketMQ ensures that all messages are delivered at least once.
+ * In most cases, the messages are not repeated.
+ */
 public class WriteRocketmqP<T> extends AbstractProcessor {
     public static final int TXN_POOL_SIZE = 2;
+    public static final int QUEUE_CAPACITY = 10000;
     private final Properties properties;
     private final Function<? super T, ? extends Message> toRecordFn;
-    private final boolean exactlyOnce;
+    private SendCallback callback;
 
     private DefaultMQProducer producer;
+    private ThreadPoolExecutor senderExecutor;
 
     private WriteRocketmqP(
             @Nonnull Properties properties,
@@ -31,7 +42,6 @@ public class WriteRocketmqP<T> extends AbstractProcessor {
             boolean exactlyOnce) {
         this.properties = properties;
         this.toRecordFn = toRecordFn;
-        this.exactlyOnce = exactlyOnce;
     }
 
     @Override
@@ -40,36 +50,84 @@ public class WriteRocketmqP<T> extends AbstractProcessor {
     }
 
     @Override
-    protected void init(@Nonnull Context context) {
-        String defaultGroup = String.join("-", "Jet", String.valueOf(context.jobId()),
-                context.vertexName(), String.valueOf(context.localProcessorIndex()));
-        String group = properties.getProperty(RocketmqConfig.CONSUMER_GROUP, defaultGroup);
+    public boolean tryProcessWatermark(@Nonnull Watermark watermark) {
+        return true;
+    }
 
-        this.producer = new DefaultMQProducer(group, RocketmqConfig.buildAclRPCHook(this.properties));
-        this.producer.setInstanceName("Jet-" + context.jobId() + "-" + context.localProcessorIndex());
+    @Override
+    public void init(@Nonnull Context context) throws Exception {
+        this.callback = new SendCallbackImpl(context.logger());
+        String defaultGroup = String.join("-", "Jet", String.valueOf(context.jobId()), String.valueOf(context.globalProcessorIndex()));
+        this.producer = new DefaultMQProducer(RocketmqConfig.buildAclRPCHook(this.properties));
+        this.producer.setInstanceName(defaultGroup);
+        this.senderExecutor = getSenderExecutor();
+        this.producer.setAsyncSenderExecutor(this.senderExecutor);
         RocketmqConfig.buildProducerConfigs(properties, this.producer);
         try {
             this.producer.start();
         } catch (MQClientException e) {
-            getLogger().warning("Unable to start consumer", e);
+            context.logger().warning("Unable to start consumer", e);
+            throw e;
         }
     }
 
+    private ThreadPoolExecutor getSenderExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                TXN_POOL_SIZE,
+                TXN_POOL_SIZE,
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(QUEUE_CAPACITY),
+                new ThreadFactory() {
+                    private final AtomicInteger threadIndex = new AtomicInteger(0);
+
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        return new Thread(r, "AsyncSenderExecutor_" + this.threadIndex.incrementAndGet());
+                    }
+                });
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
     @Override
-    public void process(int ordinal, @Nonnull Inbox inbox) {
-        List<Message> messages = new ArrayList<>();
-        for (Object item; (item = inbox.peek()) != null; ) {
-            @SuppressWarnings("unchecked")
-            Message message = toRecordFn.apply((T) item);
-            if (message != null) {
-                messages.add(message);
-            }
-        }
+    protected boolean tryProcess(int ordinal, @Nonnull Object item) throws Exception {
+        @SuppressWarnings("unchecked")
+        Message message = toRecordFn.apply((T) item);
+        return produce(message);
+    }
+
+    @Override
+    public boolean complete() {
+        return senderExecutor.getQueue().isEmpty();
+    }
+
+    private boolean produce(Message message) {
         try {
-            this.producer.send(messages);
-            inbox.clear();
-        } catch (MQClientException | RemotingException | MQBrokerException | InterruptedException e) {
+            this.producer.send(message, callback);
+        } catch (MQClientException | RemotingException | InterruptedException e) {
             getLogger().warning("Unable to send data", e);
+            return false;
+        }
+        return true;
+    }
+
+    private static class SendCallbackImpl implements SendCallback {
+        private final ILogger logger;
+
+        private SendCallbackImpl(ILogger logger) {
+            this.logger = logger;
+        }
+
+        @Override
+        public void onSuccess(SendResult sendResult) {
+        }
+
+        @Override
+        public void onException(Throwable e) {
+            if (e != null && logger != null) {
+                logger.warning("Async send message failure!", e);
+            }
         }
     }
 
@@ -84,41 +142,6 @@ public class WriteRocketmqP<T> extends AbstractProcessor {
             @Nonnull Properties properties,
             @Nonnull Function<? super T, ? extends Message> toRecordFn,
             boolean exactlyOnce) {
-        return () -> new WriteRocketmqP<>(properties, toRecordFn, exactlyOnce);
-    }
-
-    private static class MessageWarp implements Serializable {
-        private final Message message;
-
-        private MessageWarp(Message message) {
-            this.message = message;
-        }
-
-        private MessageWarp of(Message message) {
-            return new MessageWarp(message);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof MessageWarp)) return false;
-            MessageWarp that = (MessageWarp) o;
-            return Objects.equals(message.getTopic(), that.message.getTopic()) &&
-                    Objects.equals(message.getKeys(), that.message.getKeys()) &&
-                    Arrays.equals(message.getBody(), that.message.getBody()) &&
-                    Objects.equals(message.getTags(), that.message.getTags()) &&
-                    Objects.equals(message.getFlag(), that.message.getFlag()) &&
-                    Objects.equals(message.getTransactionId(), that.message.getTransactionId());
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(message.getTopic(),
-                    message.getKeys(),
-                    Arrays.hashCode(message.getBody()),
-                    message.getTags(),
-                    message.getFlag(),
-                    message.getTransactionId());
-        }
+        return () -> new WriteRocketmqP<>(properties, toRecordFn, false);
     }
 }

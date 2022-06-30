@@ -83,13 +83,13 @@ public class StreamRocketmqP<T> extends AbstractProcessor {
         this.topics = uniqueTopics;
         this.processorIndex = context.globalProcessorIndex();
         this.totalParallelism = context.totalParallelism();
-        String defaultGroup = String.join("-", String.valueOf(context.jobId()), context.vertexName());
+        String defaultGroup = String.join("-", "Jet", String.valueOf(context.jobId()));
         String group = properties.getProperty(RocketmqConfig.CONSUMER_GROUP, defaultGroup);
 
         this.consumer = new DefaultLitePullConsumer(group);
         RocketmqConfig.buildConsumerConfigs(properties, this.consumer);
         this.consumer.setAutoCommit(true);
-        this.consumer.setInstanceName("Jet-" + context.jobId() + "-" + processorIndex);
+        this.consumer.setInstanceName(defaultGroup + "-" + processorIndex);
         this.consumer.setPullThreadNums(2);
         try {
             this.consumer.start();

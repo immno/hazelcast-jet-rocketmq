@@ -17,16 +17,26 @@
 package io.github.immno.jet.rocketmq.impl;
 
 import com.hazelcast.test.HazelcastTestSupport;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.protocol.body.ClusterInfo;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.test.util.MQAdmin;
+import org.junit.Assert;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class RocketmqTestSupport {
     protected DefaultMQProducer producer;
@@ -58,7 +68,7 @@ public class RocketmqTestSupport {
         return null;
     }
 
-    private DefaultMQProducer getProducer() {
+    public DefaultMQProducer getProducer() {
         if (producer == null) {
             producer = new DefaultMQProducer();
             producer.setNamesrvAddr(namesrvAddr);
@@ -78,90 +88,40 @@ public class RocketmqTestSupport {
         }
     }
 
-//
-//    public void resetProducer() {
-//        this.producer = null;
-//    }
-//
-//    public KafkaConsumer<Integer, String> createConsumer(String... topicIds) {
-//        return createConsumer(IntegerDeserializer.class, StringDeserializer.class, emptyMap(), topicIds);
-//    }
-//
-//    public <K, V> KafkaConsumer<K, V> createConsumer(
-//            Class<? extends Deserializer<K>> keyDeserializerClass,
-//            Class<? extends Deserializer<V>> valueDeserializerClass,
-//            Map<String, String> properties,
-//            String... topicIds
-//    ) {
-//        Properties consumerProps = new Properties();
-//        consumerProps.setProperty("bootstrap.servers", brokerConnectionString);
-//        consumerProps.setProperty("group.id", randomString());
-//        consumerProps.setProperty("client.id", "consumer0");
-//        consumerProps.setProperty("key.deserializer", keyDeserializerClass.getCanonicalName());
-//        consumerProps.setProperty("value.deserializer", valueDeserializerClass.getCanonicalName());
-//        consumerProps.setProperty("isolation.level", "read_committed");
-//        // to make sure the consumer starts from the beginning of the topic
-//        consumerProps.setProperty("auto.offset.reset", "earliest");
-//        consumerProps.putAll(properties);
-//        KafkaConsumer<K, V> consumer = new KafkaConsumer<>(consumerProps);
-//        consumer.subscribe(Arrays.asList(topicIds));
-//        return consumer;
-//    }
-//
-//    public void assertTopicContentsEventually(
-//            String topic,
-//            Map<Integer, String> expected,
-//            boolean assertPartitionEqualsKey
-//    ) {
-//        try (KafkaConsumer<Integer, String> consumer = createConsumer(topic)) {
-//            long timeLimit = System.nanoTime() + SECONDS.toNanos(10);
-//            for (int totalRecords = 0; totalRecords < expected.size() && System.nanoTime() < timeLimit; ) {
-//                ConsumerRecords<Integer, String> records = consumer.poll(Duration.ofMillis(100));
-//                for (ConsumerRecord<Integer, String> record : records) {
-//                    assertEquals("key=" + record.key(), expected.get(record.key()), record.value());
-//                    if (assertPartitionEqualsKey) {
-//                        assertEquals(record.key().intValue(), record.partition());
-//                    }
-//                    totalRecords++;
-//                }
-//            }
-//        }
-//    }
-//
-//    public <K, V> void assertTopicContentsEventually(
-//            String topic,
-//            Map<K, V> expected,
-//            Class<? extends Deserializer<K>> keyDeserializerClass,
-//            Class<? extends Deserializer<V>> valueDeserializerClass
-//    ) {
-//        assertTopicContentsEventually(topic, expected, keyDeserializerClass, valueDeserializerClass, emptyMap());
-//    }
-//
-//    public <K, V> void assertTopicContentsEventually(
-//            String topic,
-//            Map<K, V> expected,
-//            Class<? extends Deserializer<K>> keyDeserializerClass,
-//            Class<? extends Deserializer<V>> valueDeserializerClass,
-//            Map<String, String> consumerProperties
-//    ) {
-//        try (KafkaConsumer<K, V> consumer = createConsumer(
-//                keyDeserializerClass,
-//                valueDeserializerClass,
-//                consumerProperties,
-//                topic
-//        )) {
-//            long timeLimit = System.nanoTime() + SECONDS.toNanos(10);
-//            Set<K> seenKeys = new HashSet<>();
-//            for (int totalRecords = 0; totalRecords < expected.size() && System.nanoTime() < timeLimit; ) {
-//                ConsumerRecords<K, V> records = consumer.poll(Duration.ofMillis(100));
-//                for (ConsumerRecord<K, V> record : records) {
-//                    assertTrue("key=" + record.key() + " already seen", seenKeys.add(record.key()));
-//                    V expectedValue = expected.get(record.key());
-//                    assertNotNull("key=" + record.key() + " received, but not expected", expectedValue);
-//                    assertEquals("key=" + record.key(), expectedValue, record.value());
-//                    totalRecords++;
-//                }
-//            }
-//        }
-//    }
+    public void resetProducer() {
+        this.producer = null;
+    }
+
+    public void consumer(List<String> topicIds, ConsumeTask<DefaultLitePullConsumer> task) {
+        DefaultLitePullConsumer consumer = new DefaultLitePullConsumer(HazelcastTestSupport.randomString());
+        consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
+        consumer.setNamesrvAddr(namesrvAddr);
+        try {
+            consumer.start();
+            for (String topicId : topicIds) {
+                consumer.subscribe(topicId, "*");
+            }
+            task.run(consumer);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            consumer.shutdown();
+        }
+    }
+
+    public void assertTopicContentsEventually(
+            String topic,
+            Map<Integer, String> expected) {
+        consumer(Collections.singletonList(topic), consumer -> {
+            long timeLimit = System.nanoTime() + SECONDS.toNanos(10);
+            for (int totalRecords = 0; totalRecords < expected.size() && System.nanoTime() < timeLimit; ) {
+                List<MessageExt> records = consumer.poll(Duration.ofMillis(100).toMillis());
+                for (MessageExt record : records) {
+                    Assert.assertEquals("key=" + record.getKeys(), expected.get(Integer.valueOf(record.getKeys())), new String(record.getBody()));
+                    totalRecords++;
+                }
+            }
+        });
+    }
+
 }

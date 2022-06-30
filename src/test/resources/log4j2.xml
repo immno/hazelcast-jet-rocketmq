@@ -3,7 +3,8 @@
 <Configuration status="ERROR">
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{ABSOLUTE} %5p |%X{test-name}| - [%c{1}] %t - %m%n"/>
+<!--            <PatternLayout pattern="%d{ABSOLUTE} %5p |%X{test-name}| - [%c{1}] %t - %m%n"/>-->
+            <PatternLayout pattern="%d{ABSOLUTE} %5p |%X{test-name}| - [%c{1}] - %msg%n"/>
         </Console>
     </Appenders>
     <Loggers>
@@ -11,6 +12,8 @@
             <AppenderRef ref="Console"/>
         </Root>
         <Logger name="com.hazelcast.jet" level="info"/>
+<!--        <Logger name="com.hazelcast.jet.impl.JobExecutionService" level="error"/>-->
+<!--        <Logger name="com.hazelcast.jet.impl.MasterJobContext" level="error"/>-->
         <Logger name="io.github.immno.jet.rocketmq" level="trace"/>
     </Loggers>
 </Configuration>

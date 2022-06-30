@@ -7,7 +7,6 @@ import org.apache.rocketmq.client.AccessChannel;
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.client.producer.TransactionMQProducer;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 
@@ -20,23 +19,35 @@ import java.util.UUID;
  * RocketMQConfig for Consumer/Producer.
  */
 public class RocketmqConfig {
-    // Server Config
-    public static final String NAME_SERVER_ADDR = "nameserver.address"; // Required
+    /**
+     * Server Config (Required)
+     */
+    public static final String NAME_SERVER_ADDR = "nameserver.address";
 
     public static final String NAME_SERVER_POLL_INTERVAL = "nameserver.poll.interval";
-    public static final int DEFAULT_NAME_SERVER_POLL_INTERVAL = 30000; // 30 seconds
+    /**
+     * 30 seconds
+     */
+    public static final int DEFAULT_NAME_SERVER_POLL_INTERVAL = 30000;
 
     public static final String BROKER_HEART_BEAT_INTERVAL = "brokerserver.heartbeat.interval";
-    public static final int DEFAULT_BROKER_HEART_BEAT_INTERVAL = 30000; // 30 seconds
+    /**
+     * 30 seconds
+     */
+    public static final int DEFAULT_BROKER_HEART_BEAT_INTERVAL = 30000;
 
-    // Access control config
+    /**
+     * Access control config
+     */
     public static final String ACCESS_KEY = "access.key";
     public static final String SECRET_KEY = "secret.key";
 
     public static final String ACCESS_CHANNEL = "access.channel";
     public static final AccessChannel DEFAULT_ACCESS_CHANNEL = AccessChannel.LOCAL;
 
-    // Producer related config
+    /**
+     * Producer related config
+     */
     public static final String PRODUCER_TOPIC = "producer.topic";
     public static final String PRODUCER_GROUP = "producer.group";
 
@@ -44,11 +55,20 @@ public class RocketmqConfig {
     public static final int DEFAULT_PRODUCER_RETRY_TIMES = 3;
 
     public static final String PRODUCER_TIMEOUT = "producer.timeout";
-    public static final int DEFAULT_PRODUCER_TIMEOUT = 3000; // 3 seconds
+    /**
+     * 3 seconds
+     */
+    public static final int DEFAULT_PRODUCER_TIMEOUT = 3000;
+    /**
+     * Important messages can be set
+     */
+    public static final String RETRY_NEXT_SERVER = "producer.retry.next.server";
 
-    // Consumer related config
-    public static final String CONSUMER_GROUP = "consumer.group"; // Required
-    public static final String CONSUMER_TOPIC = "consumer.topic"; // Required
+    /**
+     * Consumer related config(Required)
+     */
+    public static final String CONSUMER_GROUP = "consumer.group";
+    public static final String CONSUMER_TOPIC = "consumer.topic";
 
     public static final String CONSUMER_TAG = "consumer.tag";
     public static final String CONSUMER_SQL = "consumer.sql";
@@ -61,7 +81,10 @@ public class RocketmqConfig {
     public static final String CONSUMER_OFFSET_FROM_TIMESTAMP = "consumer.offset.from.timestamp";
 
     public static final String CONSUMER_OFFSET_PERSIST_INTERVAL = "consumer.offset.persist.interval";
-    public static final int DEFAULT_CONSUMER_OFFSET_PERSIST_INTERVAL = 5000; // 5 seconds
+    /**
+     * 5 seconds
+     */
+    public static final int DEFAULT_CONSUMER_OFFSET_PERSIST_INTERVAL = 5000;
 
     public static final String CONSUMER_BATCH_SIZE = "consumer.batch.size";
     public static final int DEFAULT_CONSUMER_BATCH_SIZE = 32;
@@ -75,27 +98,86 @@ public class RocketmqConfig {
 
     public static final String WATERMARK = "watermark";
 
-    // Delay message related config
+    /**
+     * Delay message related config
+     */
     public static final String MSG_DELAY_LEVEL = "msg.delay.level";
-    public static final int MSG_DELAY_LEVEL00 = 0; // no delay
-    public static final int MSG_DELAY_LEVEL01 = 1; // 1s
-    public static final int MSG_DELAY_LEVEL02 = 2; // 5s
-    public static final int MSG_DELAY_LEVEL03 = 3; // 10s
-    public static final int MSG_DELAY_LEVEL04 = 4; // 30s
-    public static final int MSG_DELAY_LEVEL05 = 5; // 1min
-    public static final int MSG_DELAY_LEVEL06 = 6; // 2min
-    public static final int MSG_DELAY_LEVEL07 = 7; // 3min
-    public static final int MSG_DELAY_LEVEL08 = 8; // 4min
-    public static final int MSG_DELAY_LEVEL09 = 9; // 5min
-    public static final int MSG_DELAY_LEVEL10 = 10; // 6min
-    public static final int MSG_DELAY_LEVEL11 = 11; // 7min
-    public static final int MSG_DELAY_LEVEL12 = 12; // 8min
-    public static final int MSG_DELAY_LEVEL13 = 13; // 9min
-    public static final int MSG_DELAY_LEVEL14 = 14; // 10min
-    public static final int MSG_DELAY_LEVEL15 = 15; // 20min
-    public static final int MSG_DELAY_LEVEL16 = 16; // 30min
-    public static final int MSG_DELAY_LEVEL17 = 17; // 1h
-    public static final int MSG_DELAY_LEVEL18 = 18; // 2h
+    /**
+     * no delay
+     */
+    public static final int MSG_DELAY_LEVEL00 = 0;
+    /**
+     * 1s
+     */
+    public static final int MSG_DELAY_LEVEL01 = 1;
+    /**
+     * 5s
+     */
+    public static final int MSG_DELAY_LEVEL02 = 2;
+    /**
+     * 10s
+     */
+    public static final int MSG_DELAY_LEVEL03 = 3;
+    /**
+     * 30s
+     */
+    public static final int MSG_DELAY_LEVEL04 = 4;
+    /**
+     * 1min
+     */
+    public static final int MSG_DELAY_LEVEL05 = 5;
+    /**
+     * 2min
+     */
+    public static final int MSG_DELAY_LEVEL06 = 6;
+    /**
+     * 3min
+     */
+    public static final int MSG_DELAY_LEVEL07 = 7;
+    /**
+     * 4min
+     */
+    public static final int MSG_DELAY_LEVEL08 = 8;
+    /**
+     * 5min
+     */
+    public static final int MSG_DELAY_LEVEL09 = 9;
+    /**
+     * 6min
+     */
+    public static final int MSG_DELAY_LEVEL10 = 10;
+    /**
+     * 7min
+     */
+    public static final int MSG_DELAY_LEVEL11 = 11;
+    /**
+     * 8min
+     */
+    public static final int MSG_DELAY_LEVEL12 = 12;
+    /**
+     * 9min
+     */
+    public static final int MSG_DELAY_LEVEL13 = 13;
+    /**
+     * 10min
+     */
+    public static final int MSG_DELAY_LEVEL14 = 14;
+    /**
+     * 20min
+     */
+    public static final int MSG_DELAY_LEVEL15 = 15;
+    /**
+     * 30min
+     */
+    public static final int MSG_DELAY_LEVEL16 = 16;
+    /**
+     * 1h
+     */
+    public static final int MSG_DELAY_LEVEL17 = 17;
+    /**
+     * 2h
+     */
+    public static final int MSG_DELAY_LEVEL18 = 18;
 
     /**
      * Build Producer Configs.
@@ -105,12 +187,18 @@ public class RocketmqConfig {
      */
     public static void buildProducerConfigs(Properties props, DefaultMQProducer producer) {
         buildCommonConfigs(props, producer);
+        String group = props.getProperty(PRODUCER_GROUP);
+        if (isEmpty(group)) {
+            group = UUID.randomUUID().toString();
+        }
+        producer.setProducerGroup(props.getProperty(PRODUCER_GROUP, group));
 
         producer.setRetryTimesWhenSendFailed(
                 getInteger(props, PRODUCER_RETRY_TIMES, DEFAULT_PRODUCER_RETRY_TIMES));
         producer.setRetryTimesWhenSendAsyncFailed(
                 getInteger(props, PRODUCER_RETRY_TIMES, DEFAULT_PRODUCER_RETRY_TIMES));
         producer.setSendMsgTimeout(getInteger(props, PRODUCER_TIMEOUT, DEFAULT_PRODUCER_TIMEOUT));
+        producer.setRetryAnotherBrokerWhenNotStoreOK(getBoolean(props, RETRY_NEXT_SERVER, false));
     }
 
     /**
